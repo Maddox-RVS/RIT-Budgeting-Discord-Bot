@@ -41,6 +41,7 @@ class UserData:
     dailyBudget: float = 0.0
 
     ledger: list[tuple[float, str, datetime]] = field(default_factory=list)
+    breaks: list[tuple[datetime, datetime]] = field(default_factory=list)
 
 userData: Optional[dict[str, UserData]] = None
 
@@ -61,6 +62,62 @@ def saveUserData() -> None:
 
 def isBudgetSetup(userID: str) -> bool:
     return userID in userData and userData[userID].budgetDate is not None
+
+def getDaysInUserBudget(userID: str) -> int:
+    if userID not in userData or userData[userID].budgetDate is None:
+        return 0
+    
+    data: UserData = userData[userID]
+    
+    today: datetime = datetime.now()
+    daysInBudget: int = (data.budgetDate - today).days
+
+    for brk in data.breaks:
+        breakStart, breakEnd = brk
+        if breakStart.date() < today.date() and breakEnd.date() < today.date(): continue
+        elif breakStart.date() < today.date(): breakStart = today
+        
+        breakLength: int = (breakEnd - breakStart).days + 1
+        daysInBudget -= breakLength
+
+def getBreaksReport(userID: str) -> str:
+    data: UserData = userData[userID]
+    
+    report: str = (
+        f'### Budget Report\n'
+        '────────────────────────────────────\n')
+    
+    for brk in data.breaks:
+        breakStart, breakEnd = brk
+        report += f'- **Break from `{breakStart.strftime('%A, %B %d, %Y')}` to `{breakEnd.strftime('%A, %B %d, %Y')}`**\n'
+
+    report += '────────────────────────────────────\n'
+    return report
+
+def addBreak(userID: str, breakStartTime: datetime, breakEndTime: datetime) -> None:
+    data: UserData = userData[userID]
+
+    data.breaks.append((breakStartTime, breakEndTime))
+
+    # TODO: Remove this code below, replace with code that iterates all breaks and resolves any overlap conflicts by merging the breaks
+    # for i, brk in enumerate(data.breaks):
+    #     exisitingBreakStart, existingEndBreak = brk
+    #     if exisitingBreakStart <= breakStartTime <= existingEndBreak or exisitingBreakStart <= breakEndTime <= existingEndBreak:
+    #         newBreakStart: datetime = min(exisitingBreakStart, breakStartTime)
+    #         newBreakEnd: datetime = max(existingEndBreak, breakEndTime)
+    #         data.breaks[i] = (newBreakStart, newBreakEnd)
+    #         userData[userID] = data
+    #         return
+
+def removeBreak(userID: str, index: int) -> list[tuple[datetime, datetime]]:
+    data: UserData = userData[userID]
+    
+    brks: list[tuple[datetime, datetime]] = data.breaks
+    return brks.pop(index)
+
+def getUserNumBreaks(userID: str) -> int:
+    data: UserData = userData[userID]
+    return len(data.breaks)
 
 def getUserBalance(userID: str) -> float:
     data: UserData = userData[userID]
@@ -111,10 +168,7 @@ def setUserBalance(userID: str, amount: float, budgetType: BudgetType) -> None:
 
 def getUserBudgetSpread(userID: str) -> float:
     data: UserData = userData[userID]
-    budgetingDate: datetime = data.budgetDate
-    today: datetime = datetime.now()
-    daysInBudget: int = (budgetingDate - today).days
-
+    daysInBudget: int = getDaysInUserBudget(userID)
     return (getUserBalance(userID) / daysInBudget) if daysInBudget > 0 else 0.0
 
 def setupBudget(userID: str, 
@@ -122,9 +176,8 @@ def setupBudget(userID: str,
                 startingTigerBucks: float, 
                 startingUSD: float, 
                 budgetDate: datetime) -> None:
-
-    today: datetime = datetime.now()
-    daysInBudget: int = (budgetDate - today).days
+    
+    daysInBudget: int = getDaysInUserBudget(userID)
     userBudgetSpread: float = (startingDiningDollars + startingTigerBucks + startingUSD) / daysInBudget if daysInBudget > 0 else 0.0
 
     userData[userID] = UserData(startingDiningDollars=startingDiningDollars,
@@ -151,8 +204,7 @@ def setUserBudgetEndDate(userID: str, budgetEndDate: datetime) -> None:
     data: UserData = userData[userID]
     data.budgetDate = budgetEndDate
 
-    today: datetime = datetime.now()
-    daysInBudget: int = (budgetEndDate - today).days
+    daysInBudget: int = getDaysInUserBudget(userID)
     userBudgetSpread: float = (data.startingDiningDollars + data.startingTigerBucks + data.startingUSD) / daysInBudget if daysInBudget > 0 else 0.0
 
     data.dailyBudget = userBudgetSpread
@@ -196,7 +248,7 @@ def getUserBudgetReport(userID: str) -> str:
         f'- **Money Spent Today →** {format_money(moneySpentToday)}\n'
         f'- **Money Left Available Today →** {format_money(data.dailyBudget - abs(moneySpentToday))}\n'
         f'- **Daily Budget →** {format_money(data.dailyBudget)}\n'
-        f'- **Budget End Date →** {data.budgetDate.strftime("%A, %B %d, %Y")}\n'
+        f'- **Budget End Date →** {data.budgetDate.strftime('%A, %B %d, %Y')}\n'
         '────────────────────────────────────\n'
     )
 
@@ -258,6 +310,27 @@ class BudgetTypeSelectorView(discord.ui.View):
     def __init__(self, userID: str, amount: float, description: str, spending: bool = True) -> None:
         super().__init__(timeout=60.0)
         self.add_item(BudgetTypeSelector(userID, amount, description, spending))
+
+class BreakRemovalSelector(discord.ui.Select):
+    def __init__(self, userID: str) -> None:
+        options: list[tuple[datetime, datetime]] = []
+        for i, brk in enumerate(userData[userID].breaks):
+            breakStart, breakEnd = brk
+            options.append(discord.SelectOption(label=f'{breakStart.strftime('%B %d, %Y')} to {breakEnd.strftime('%B %d, %Y')}', value=i))
+        
+        super().__init__(placeholder='Select a break to remove...', options=options, min_values=1, max_values=1) # dont set max_value to more than 1, the backend's remove break uses .pop(index), popping one index shifts the rest
+
+        self.userID: str = userID
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        index: int = int(self.values[0])
+        removedBreak: tuple[datetime, datetime] = removeBreak(self.userID, index)
+        await interaction.response.send_message(f'Removed break from `{removedBreak[0].strftime('%A, %B %d, %Y')}` to `{removedBreak[1].strftime('%A, %B %d, %Y')}`.', ephemeral=True)
+
+class BreakRemovalSelectorView(discord.ui.View):
+    def __init__(self, userID: str) -> None:
+        super().__init__(timeout=60.0)
+        self.add_item(BreakRemovalSelector(userID))
 
 intialize()
 atexit.register(saveUserData)

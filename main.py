@@ -26,20 +26,20 @@ async def setupCmd(interaction: discord.Interaction,
     userID: str = str(interaction.user.id)
 
     if backend.isBudgetSetup(userID):
-        await interaction.response.send_message("You have already set up your budget!", ephemeral=True)
+        await interaction.response.send_message('You have already set up your budget!', ephemeral=True)
         return
     
     try: 
-        parsedDate: datetime = datetime.strptime(budget_end_date, "%Y-%m-%d")
+        parsedDate: datetime = datetime.strptime(budget_end_date, '%Y-%m-%d')
 
         if parsedDate.date() <= datetime.now().date():
-            await interaction.response.send_message("The budget end date must be in the future!", ephemeral=True)
+            await interaction.response.send_message('The budget end date must be in the future!', ephemeral=True)
             return
 
         backend.setupBudget(userID, starting_dining_dollars, starting_tiger_bucks, starting_us_dollars, parsedDate)
-        await interaction.response.send_message(f'Setup complete! Your budget will end on {parsedDate.strftime('%A, %B %d, %Y')}.\n\nYour current balance: {backend.getUserBalance(userID)}', ephemeral=True)
+        await interaction.response.send_message(f'Setup complete! Your budget will end on {parsedDate.strftime("%A, %B %d, %Y")}.\n\nYour current balance: {backend.getUserBalance(userID)}', ephemeral=True)
     except ValueError:
-        await interaction.response.send_message("Invalid date format! Use YYYY-MM-DD.", ephemeral=True)
+        await interaction.response.send_message('Invalid date format! Use YYYY-MM-DD.', ephemeral=True)
         return
     
 @tree.command(name='report', description='Reports your current balance and daily budget.')
@@ -47,7 +47,7 @@ async def reportCmd(interaction: discord.Interaction) -> None:
     userID: str = str(interaction.user.id)
 
     if not backend.isBudgetSetup(userID):
-        await interaction.response.send_message("You need to set up your budget first using /setup.", ephemeral=True)
+        await interaction.response.send_message('You need to set up your budget first using /setup.', ephemeral=True)
         return
 
     report: str = backend.getUserBudgetReport(userID)
@@ -59,21 +59,25 @@ async def transactionsCmd(interaction: discord.Interaction, date_start_range: Op
     userID: str = str(interaction.user.id)
 
     if not backend.isBudgetSetup(userID):
-        await interaction.response.send_message("You need to set up your budget first using /setup.", ephemeral=True)
+        await interaction.response.send_message('You need to set up your budget first using /setup.', ephemeral=True)
         return
     
     if (date_start_range is None) != (date_end_range is None):
-        await interaction.response.send_message("Please provide both date ranges (start and end).", ephemeral=True)
+        await interaction.response.send_message('Please provide both date ranges (start and end).', ephemeral=True)
         return
 
     try:
-        parsedStartDate: Optional[datetime] = datetime.strptime(date_start_range, "%Y-%m-%d") if date_start_range else None
-        parsedEndDate: Optional[datetime] = datetime.strptime(date_end_range, "%Y-%m-%d") if date_end_range else None
+        parsedStartDate: Optional[datetime] = datetime.strptime(date_start_range, '%Y-%m-%d') if date_start_range else None
+        parsedEndDate: Optional[datetime] = datetime.strptime(date_end_range, '%Y-%m-%d') if date_end_range else None
+
+        if (parsedStartDate is not None and parsedEndDate is not None) and parsedStartDate >= parsedEndDate:
+            await interaction.response.send_message('The start date must be before the end date!', ephemeral=True)
+            return
 
         transactions: str = backend.getUserTransactionHistory(userID, parsedStartDate, parsedEndDate)
         await interaction.response.send_message(transactions, ephemeral=True)
     except ValueError:
-        await interaction.response.send_message("Invalid date format! Use YYYY-MM-DD.", ephemeral=True)
+        await interaction.response.send_message('Invalid date format! Use YYYY-MM-DD.', ephemeral=True)
         return
 
 @tree.command(name='spent', description='Records an expense for the user.')
@@ -81,11 +85,11 @@ async def spentCmd(interaction: discord.Interaction, amount: float, description:
     userID: str = str(interaction.user.id)
 
     if not backend.isBudgetSetup(userID):
-        await interaction.response.send_message("You need to set up your budget first using /setup.", ephemeral=True)
+        await interaction.response.send_message('You need to set up your budget first using /setup.', ephemeral=True)
         return
     
     await interaction.response.send_message(
-        f'Choose which money type to apply the transaction to:',
+        'Choose which money type to apply the transaction to:',
         view=backend.BudgetTypeSelectorView(userID, amount, description, spending=True),
         ephemeral=True)
     
@@ -94,11 +98,11 @@ async def addCmd(interaction: discord.Interaction, amount: float, description: s
     userID: str = str(interaction.user.id)
 
     if not backend.isBudgetSetup(userID):
-        await interaction.response.send_message("You need to set up your budget first using /setup.", ephemeral=True)
+        await interaction.response.send_message('You need to set up your budget first using /setup.', ephemeral=True)
         return
     
     await interaction.response.send_message(
-        f'Choose which money type to apply the transaction to:',
+        'Choose which money type to apply the transaction to:',
         view=backend.BudgetTypeSelectorView(userID, amount, description, spending=False),
         ephemeral=True)
     
@@ -107,13 +111,13 @@ async def respreadCmd(interaction: discord.Interaction) -> None:
     userID: str = str(interaction.user.id)
 
     if not backend.isBudgetSetup(userID):
-        await interaction.response.send_message("You need to set up your budget first using /setup.", ephemeral=True)
+        await interaction.response.send_message('You need to set up your budget first using /setup.', ephemeral=True)
         return
 
     backend.respreadUserBudget(userID)
     dailyBudget = backend.getUserDailyBudget(userID)
     await interaction.response.send_message(
-        f"Your remaining budget has been respread over the remaining days.\nYour daily budget is now ${dailyBudget:.2f}.",
+        f'Your remaining budget has been respread over the remaining days.\nYour daily budget is now ${dailyBudget:.2f}.',
         ephemeral=True)
     
 @tree.command(name='set-budget-end-date', description='Sets the end date for the user\'s budget.')
@@ -121,22 +125,79 @@ async def setBudgetEndDateCmd(interaction: discord.Interaction, budget_end_date:
     userID: str = str(interaction.user.id)
 
     if not backend.isBudgetSetup(userID):
-        await interaction.response.send_message("You need to set up your budget first using /setup.", ephemeral=True)
+        await interaction.response.send_message('You need to set up your budget first using /setup.', ephemeral=True)
         return
 
     try:
-        parsedDate: datetime = datetime.strptime(budget_end_date, "%Y-%m-%d")
+        parsedDate: datetime = datetime.strptime(budget_end_date, '%Y-%m-%d')
 
         if parsedDate.date() <= datetime.now().date():
-            await interaction.response.send_message("The budget end date must be in the future!", ephemeral=True)
+            await interaction.response.send_message('The budget end date must be in the future!', ephemeral=True)
             return
 
         backend.setUserBudgetEndDate(userID, parsedDate)
         await interaction.response.send_message(f'Your budget end date has been set to {parsedDate.strftime("%A, %B %d, %Y")}.', ephemeral=True)
     except ValueError:
-        await interaction.response.send_message("Invalid date format! Use YYYY-MM-DD.", ephemeral=True)
+        await interaction.response.send_message('Invalid date format! Use YYYY-MM-DD.', ephemeral=True)
+        return
+    
+@tree.command(name='add-break', description='Adds a break period to the user\'s budget.')
+async def addBreakCmd(interaction: discord.Interaction, start_date: str, end_date: str) -> None:
+    userID: str = str(interaction.user.id)
+
+    if not backend.isBudgetSetup(userID):
+        await interaction.response.send_message('You need to set up your budget first using /setup.', ephemeral=True)
         return
 
+    try:
+        parsedStartDate: datetime = datetime.strptime(start_date, '%Y-%m-%d')
+        parsedEndDate: datetime = datetime.strptime(end_date, '%Y-%m-%d')
+
+        if parsedStartDate >= parsedEndDate:
+            await interaction.response.send_message('The start date must be before the end date!', ephemeral=True)
+            return
+
+        backend.addBreak(userID, parsedStartDate, parsedEndDate)
+        await interaction.response.send_message(f'Break added from `{parsedStartDate.strftime("%A, %B %d, %Y")}` to `{parsedEndDate.strftime("%A, %B %d, %Y")}`.', ephemeral=True)
+    except ValueError:
+        await interaction.response.send_message('Invalid date format! Use YYYY-MM-DD.', ephemeral=True)
+        return
+    
+@tree.command(name='remove-break', description='Removes a break period from the user\'s budget.')
+async def removeBreakCmd(interaction: discord.Interaction) -> None:
+    userID: str = str(interaction.user.id)
+
+    if not backend.isBudgetSetup(userID):
+        await interaction.response.send_message('You need to set up your budget first using /setup.', ephemeral=True)
+        return
+
+    breaks: int = backend.getUserNumBreaks(userID)
+    
+    if breaks == 0:
+        await interaction.response.send_message('You have no breaks to remove.', ephemeral=True)
+        return
+
+    await interaction.response.send_message(
+        'Select a break to remove:', 
+        view=backend.BreakRemovalSelectorView(userID), 
+        ephemeral=True)
+    
+@tree.command(name='breaks', description='Shows the user\'s break periods.')
+async def breaksCmd(interaction: discord.Interaction) -> None:
+    userID: str = str(interaction.user.id)
+
+    if not backend.isBudgetSetup(userID):
+        await interaction.response.send_message('You need to set up your budget first using /setup.', ephemeral=True)
+        return
+
+    breaks: int = backend.getUserNumBreaks(userID)
+
+    if breaks == 0:
+        await interaction.response.send_message('You have no breaks.', ephemeral=True)
+        return
+    
+    await interaction.response.send_message(f'You have {breaks} break(s).\n\n{backend.getBreaksReport(userID)}', ephemeral=True)
+    
 @client.event
 async def on_ready() -> None:
     await tree.sync()
