@@ -152,7 +152,7 @@ def setUserBudgetEndDate(userID: str, budgetEndDate: datetime) -> None:
     data.budgetDate = budgetEndDate
 
     today: datetime = datetime.now()
-    daysInBudget: int = (today - budgetEndDate).days
+    daysInBudget: int = (budgetEndDate - today).days
     userBudgetSpread: float = (data.startingDiningDollars + data.startingTigerBucks + data.startingUSD) / daysInBudget if daysInBudget > 0 else 0.0
 
     data.dailyBudget = userBudgetSpread

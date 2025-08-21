@@ -115,6 +115,27 @@ async def respreadCmd(interaction: discord.Interaction) -> None:
     await interaction.response.send_message(
         f"Your remaining budget has been respread over the remaining days.\nYour daily budget is now ${dailyBudget:.2f}.",
         ephemeral=True)
+    
+@tree.command(name='set-budget-end-date', description='Sets the end date for the user\'s budget.')
+async def setBudgetEndDateCmd(interaction: discord.Interaction, budget_end_date: str) -> None:
+    userID: str = str(interaction.user.id)
+
+    if not backend.isBudgetSetup(userID):
+        await interaction.response.send_message("You need to set up your budget first using /setup.", ephemeral=True)
+        return
+
+    try:
+        parsedDate: datetime = datetime.strptime(budget_end_date, "%Y-%m-%d")
+
+        if parsedDate.date() <= datetime.now().date():
+            await interaction.response.send_message("The budget end date must be in the future!", ephemeral=True)
+            return
+
+        backend.setUserBudgetEndDate(userID, parsedDate)
+        await interaction.response.send_message(f'Your budget end date has been set to {parsedDate.strftime("%A, %B %d, %Y")}.', ephemeral=True)
+    except ValueError:
+        await interaction.response.send_message("Invalid date format! Use YYYY-MM-DD.", ephemeral=True)
+        return
 
 @client.event
 async def on_ready() -> None:
